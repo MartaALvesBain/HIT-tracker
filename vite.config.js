@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig(({ command }) => ({
   // For GitHub Pages - change 'hit-tracker' to your repo name if different
-  base: command === 'build' ? '/hit-tracker/' : '/',
+  base: command === 'build' ? '/HIT-tracker/' : '/',
   plugins: [
     react(),
     VitePWA({
