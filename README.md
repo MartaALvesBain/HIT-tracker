@@ -177,6 +177,3 @@ Replace the SVG files in `/public` with generated PNGs.
 
 MIT — do whatever you want with it!
 
----
-
-Built for a 47-year-old woman training at home with dumbbells and bands, following Dorian Yates' HIT principles. Train hard, train smart, recover fully. 💪
