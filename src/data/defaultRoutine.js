@@ -1,4 +1,4 @@
-export const DEFAULT_ROUTINE = {
+export const HOME_ROUTINE = {
   legs: {
     name: "Legs",
     dayOfWeek: "Wednesday",
@@ -38,7 +38,47 @@ export const DEFAULT_ROUTINE = {
   }
 };
 
+export const TRAVEL_ROUTINE = {
+  legs: {
+    name: "Legs",
+    dayOfWeek: "Wednesday",
+    color: "emerald",
+    exercises: [
+      { id: "travel-squat", name: "Band Squat", targetReps: "15-20", tempo: "3/2/2", warmupSets: 1, workingSets: 1, notes: "Stand on band, hold at shoulders. Heavy band." },
+      { id: "travel-rdl", name: "Band RDL", targetReps: "12-15", tempo: "3/1/2", warmupSets: 1, workingSets: 1, notes: "Stand on band, hinge at hips. Keep back flat. Heavy band." },
+      { id: "travel-lunge", name: "Band Reverse Lunge", targetReps: "12-15 each", tempo: "3/1/2", warmupSets: 1, workingSets: 1, notes: "Stand on band, handles at shoulders. Medium-heavy band." },
+      { id: "travel-glute-bridge", name: "Band Glute Bridge", targetReps: "15-20", tempo: "2/2/2", warmupSets: 1, workingSets: 1, notes: "Band across hips, anchored under shoulders. Squeeze at top." },
+      { id: "travel-leg-curl", name: "Band Leg Curl", targetReps: "15-20", tempo: "2/1/3", warmupSets: 1, workingSets: 1, notes: "Anchor low (door bottom), lie face down. 3-sec lowering." }
+    ]
+  },
+  push: {
+    name: "Push",
+    dayOfWeek: "Saturday",
+    color: "rose",
+    exercises: [
+      { id: "travel-pushup", name: "Band Push-Up", targetReps: "12-20", tempo: "3/2/2", warmupSets: 1, workingSets: 1, notes: "Band across upper back, hands on ends. Medium band." },
+      { id: "travel-chest-press", name: "Band Chest Press", targetReps: "12-15", tempo: "3/1/2", warmupSets: 1, workingSets: 1, notes: "Anchor behind you (door), press forward. Heavy band." },
+      { id: "travel-shoulder-press", name: "Band Shoulder Press", targetReps: "12-15", tempo: "3/1/2", warmupSets: 1, workingSets: 1, notes: "Stand on band, press overhead. Medium band." },
+      { id: "travel-lateral-raise", name: "Band Lateral Raise", targetReps: "15-20", tempo: "2/1/2", warmupSets: 1, workingSets: 1, notes: "Stand on band, go light and slow. Light band." },
+      { id: "travel-tricep", name: "Band Tricep Pushdown", targetReps: "12-15", tempo: "3/1/2", warmupSets: 1, workingSets: 1, notes: "Anchor high (door top), push down. Light-medium band." }
+    ]
+  },
+  pull: {
+    name: "Pull",
+    dayOfWeek: "Sunday",
+    color: "violet",
+    exercises: [
+      { id: "travel-row", name: "Band Row", targetReps: "12-15", tempo: "3/1/2", warmupSets: 1, workingSets: 1, notes: "Anchor at chest height or stand on band. Medium-heavy band." },
+      { id: "travel-pulldown", name: "Band Lat Pulldown", targetReps: "12-15", tempo: "3/2/2", warmupSets: 1, workingSets: 1, notes: "Anchor high, kneel, pull to chest. Medium-heavy band." },
+      { id: "travel-face-pull", name: "Band Face Pull", targetReps: "15-20", tempo: "2/1/2", warmupSets: 1, workingSets: 1, notes: "Anchor at face height. Light-medium band." },
+      { id: "travel-pull-apart", name: "Band Pull-Apart", targetReps: "15-20", tempo: "2/1/2", warmupSets: 1, workingSets: 1, notes: "Hold band in front, pull hands apart. Light band." },
+      { id: "travel-curl", name: "Band Bicep Curl", targetReps: "12-15", tempo: "3/1/2", warmupSets: 1, workingSets: 1, notes: "Stand on band, curl up. Medium band." }
+    ]
+  }
+};
+
 export const STARTING_WEIGHTS = {
+  // Home weights (kg)
   'goblet-squat': 16,
   'romanian-deadlift': 12,
   'reverse-lunge': 8,
@@ -54,7 +94,25 @@ export const STARTING_WEIGHTS = {
   'band-pulldown': 0,
   'db-pullover': 10,
   'face-pull': 0,
-  'bicep-curl': 6
+  'bicep-curl': 6,
+  // Travel weights (band level: 0=bodyweight, 1=light, 2=medium, 3=heavy)
+  'travel-squat': 3,
+  'travel-rdl': 3,
+  'travel-lunge': 2,
+  'travel-glute-bridge': 3,
+  'travel-leg-curl': 2,
+  'travel-pushup': 2,
+  'travel-chest-press': 3,
+  'travel-shoulder-press': 2,
+  'travel-lateral-raise': 1,
+  'travel-tricep': 1,
+  'travel-row': 2,
+  'travel-pulldown': 2,
+  'travel-face-pull': 1,
+  'travel-pull-apart': 1,
+  'travel-curl': 2
 };
 
-export default DEFAULT_ROUTINE;
+export const DEFAULT_ROUTINE = HOME_ROUTINE;
+
+export default { HOME_ROUTINE, TRAVEL_ROUTINE, STARTING_WEIGHTS };
