@@ -2,10 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Trophy, ChevronRight, Check, Plus, Minus, Timer, X, TrendingUp, 
   Dumbbell, FileText, Home, Sparkles, Edit2, Save, Activity, 
-  Cloud, CloudOff, User, LogOut, RefreshCw
+  Cloud, CloudOff, RefreshCw, Plane, House
 } from 'lucide-react';
 import { useGoogleDrive } from './hooks/useGoogleDrive';
-import { DEFAULT_ROUTINE, STARTING_WEIGHTS } from './data/defaultRoutine';
+import { HOME_ROUTINE, TRAVEL_ROUTINE, STARTING_WEIGHTS } from './data/defaultRoutine';
+
+// Band level names for travel mode
+const BAND_LEVELS = ['None', 'Light', 'Medium', 'Heavy', 'X-Heavy'];
 
 // Utility: Check for PR
 const checkForPR = (exerciseId, weight, reps, history) => {
@@ -22,7 +25,7 @@ const checkForPR = (exerciseId, weight, reps, history) => {
 };
 
 // Utility: Generate report
-const generateReport = (history, routine) => {
+const generateReport = (history, routine, trainingMode) => {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const recent = history.filter(h => new Date(h.date) >= thirtyDaysAgo);
@@ -30,6 +33,7 @@ const generateReport = (history, routine) => {
 
   const getProgress = (type) => {
     const day = routine[type];
+    if (!day) return [];
     return day.exercises.map(ex => {
       const recentSets = recent.flatMap(h => h.exercises).filter(e => e.exerciseId === ex.id).flatMap(e => e.sets).filter(s => s.type === 'working');
       const olderSets = older.flatMap(h => h.exercises).filter(e => e.exerciseId === ex.id).flatMap(e => e.sets).filter(s => s.type === 'working');
@@ -38,7 +42,9 @@ const generateReport = (history, routine) => {
       const current = recentSets.reduce((best, s) => s.weight > best.weight ? s : best, recentSets[0]);
       const starting = olderSets.length > 0 ? olderSets.reduce((best, s) => s.weight < best.weight ? s : best, olderSets[0]) : recentSets[0];
       const change = current.weight - starting.weight;
-      return { name: ex.name, starting: `${starting.weight}kg × ${starting.reps}`, current: `${current.weight}kg × ${current.reps}`, change, isStall: change === 0 };
+      const unit = ex.id.startsWith('travel-') ? ' band' : 'kg';
+      const formatWeight = (w) => ex.id.startsWith('travel-') ? BAND_LEVELS[w] || w : w + 'kg';
+      return { name: ex.name, starting: `${formatWeight(starting.weight)} × ${starting.reps}`, current: `${formatWeight(current.weight)} × ${current.reps}`, change, isStall: change === 0, isTravel: ex.id.startsWith('travel-') };
     }).filter(Boolean);
   };
 
@@ -47,7 +53,13 @@ const generateReport = (history, routine) => {
   const pullProgress = getProgress('pull');
   const allStalls = [...legsProgress, ...pushProgress, ...pullProgress].filter(p => p.isStall).map(p => p.name);
 
-  const formatTable = (items) => items.map(p => `  ${p.name.padEnd(22)} ${p.starting.padEnd(12)} → ${p.current.padEnd(12)} (${p.change >= 0 ? '+' : ''}${p.change}kg)`).join('\n');
+  const formatTable = (items) => items.map(p => {
+    const changeStr = p.isTravel ? (p.change >= 0 ? '+' + p.change : p.change) + ' level' : (p.change >= 0 ? '+' : '') + p.change + 'kg';
+    return `  ${p.name.padEnd(22)} ${p.starting.padEnd(14)} → ${p.current.padEnd(14)} (${changeStr})`;
+  }).join('\n');
+
+  const homeSessions = recent.filter(h => h.trainingMode !== 'travel').length;
+  const travelSessions = recent.filter(h => h.trainingMode === 'travel').length;
 
   return `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
        30-DAY PROGRESS REPORT
@@ -65,6 +77,9 @@ WORKOUT DISTRIBUTION
   Legs   ${recent.filter(h => h.workoutType === 'legs').length} sessions
   Push   ${recent.filter(h => h.workoutType === 'push').length} sessions
   Pull   ${recent.filter(h => h.workoutType === 'pull').length} sessions
+  
+  🏠 Home     ${homeSessions} sessions
+  ✈️  Travel   ${travelSessions} sessions
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -98,7 +113,7 @@ Consider: increase reps first, add intensity technique, or swap variation.
   Training style    HIT (Dorian Yates inspired)
   Rep ranges        10-20, controlled tempos
   Goal              Build lean mass safely
-  Setting           Home gym with dumbbells + bands
+  Setting           Home gym + Travel (bands)
   Considerations    Age 47, injury prevention priority
 `;
 };
@@ -108,12 +123,20 @@ export default function App() {
   // Google Drive
   const { isSignedIn, isLoading: driveLoading, user, signIn, signOut, loadData, saveData } = useGoogleDrive();
 
+  // Training mode
+  const [trainingMode, setTrainingMode] = useState('home'); // 'home' or 'travel'
+
   // Core state
   const [screen, setScreen] = useState('home');
-  const [routine, setRoutine] = useState(DEFAULT_ROUTINE);
+  const [homeRoutine, setHomeRoutine] = useState(HOME_ROUTINE);
+  const [travelRoutine, setTravelRoutine] = useState(TRAVEL_ROUTINE);
   const [history, setHistory] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState(null);
+
+  // Get current routine based on mode
+  const routine = trainingMode === 'travel' ? travelRoutine : homeRoutine;
+  const setRoutine = trainingMode === 'travel' ? setTravelRoutine : setHomeRoutine;
 
   // Workout state
   const [currentWorkout, setCurrentWorkout] = useState(null);
@@ -134,48 +157,43 @@ export default function App() {
   const [reportText, setReportText] = useState('');
   const [showSettings, setShowSettings] = useState(false);
 
-  // Load data on mount and when signed in
+  // Load data on mount
   useEffect(() => {
     const loadLocalData = () => {
       const localHistory = localStorage.getItem('hit-tracker-history');
-      const localRoutine = localStorage.getItem('hit-tracker-routine');
+      const localHomeRoutine = localStorage.getItem('hit-tracker-home-routine');
+      const localTravelRoutine = localStorage.getItem('hit-tracker-travel-routine');
+      const localMode = localStorage.getItem('hit-tracker-mode');
       if (localHistory) setHistory(JSON.parse(localHistory));
-      if (localRoutine) setRoutine(JSON.parse(localRoutine));
+      if (localHomeRoutine) setHomeRoutine(JSON.parse(localHomeRoutine));
+      if (localTravelRoutine) setTravelRoutine(JSON.parse(localTravelRoutine));
+      if (localMode) setTrainingMode(localMode);
     };
-
     loadLocalData();
   }, []);
 
-  // Sync with Google Drive when signed in
+  // Sync with Google Drive
   useEffect(() => {
     if (isSignedIn && !driveLoading) {
       syncWithDrive();
     }
   }, [isSignedIn, driveLoading]);
 
-  // Sync function
   const syncWithDrive = async () => {
     if (!isSignedIn) return;
-
     setIsSyncing(true);
     try {
       const cloudData = await loadData();
-
       if (cloudData) {
-        // Merge: use the one with more history or more recent changes
         const localHistory = JSON.parse(localStorage.getItem('hit-tracker-history') || '[]');
         const mergedHistory = cloudData.history?.length > localHistory.length ? cloudData.history : localHistory;
-
         setHistory(mergedHistory);
-        if (cloudData.routine) setRoutine(cloudData.routine);
-
-        // Save merged data back
-        await saveData({ history: mergedHistory, routine: cloudData.routine || routine });
+        if (cloudData.homeRoutine) setHomeRoutine(cloudData.homeRoutine);
+        if (cloudData.travelRoutine) setTravelRoutine(cloudData.travelRoutine);
+        await saveData({ history: mergedHistory, homeRoutine: cloudData.homeRoutine || homeRoutine, travelRoutine: cloudData.travelRoutine || travelRoutine });
       } else {
-        // No cloud data, upload local
-        await saveData({ history, routine });
+        await saveData({ history, homeRoutine, travelRoutine });
       }
-
       setLastSynced(new Date());
     } catch (err) {
       console.error('Sync error:', err);
@@ -184,14 +202,13 @@ export default function App() {
     }
   };
 
-  // Auto-save to local storage and Drive
+  // Auto-save
   useEffect(() => {
     if (history.length > 0) {
       localStorage.setItem('hit-tracker-history', JSON.stringify(history));
       if (isSignedIn) {
-        // Debounced save to Drive
         const timeout = setTimeout(() => {
-          saveData({ history, routine }).then(() => setLastSynced(new Date()));
+          saveData({ history, homeRoutine, travelRoutine }).then(() => setLastSynced(new Date()));
         }, 2000);
         return () => clearTimeout(timeout);
       }
@@ -199,14 +216,10 @@ export default function App() {
   }, [history, isSignedIn]);
 
   useEffect(() => {
-    localStorage.setItem('hit-tracker-routine', JSON.stringify(routine));
-    if (isSignedIn) {
-      const timeout = setTimeout(() => {
-        saveData({ history, routine });
-      }, 2000);
-      return () => clearTimeout(timeout);
-    }
-  }, [routine, isSignedIn]);
+    localStorage.setItem('hit-tracker-home-routine', JSON.stringify(homeRoutine));
+    localStorage.setItem('hit-tracker-travel-routine', JSON.stringify(travelRoutine));
+    localStorage.setItem('hit-tracker-mode', trainingMode);
+  }, [homeRoutine, travelRoutine, trainingMode]);
 
   // Rest timer
   useEffect(() => {
@@ -241,8 +254,11 @@ export default function App() {
       ]
     }));
 
-    // Pre-fill from last workout
-    const lastWorkout = history.filter(h => h.workoutType === type).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+    // Pre-fill from last same workout type AND same mode
+    const lastWorkout = history
+      .filter(h => h.workoutType === type && h.trainingMode === trainingMode)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+    
     if (lastWorkout) {
       exercises.forEach(ex => {
         const lastEx = lastWorkout.exercises.find(e => e.exerciseId === ex.id);
@@ -255,6 +271,7 @@ export default function App() {
       date: new Date().toISOString(), 
       workoutType: type, 
       workoutName: workoutRoutine.name, 
+      trainingMode: trainingMode,
       exercises, 
       completed: false 
     };
@@ -286,12 +303,8 @@ export default function App() {
     setCurrentWorkout(updated);
     setRestTimeLeft(set.type === 'warmup' ? 60 : 90);
 
-    if (currentSetIndex < ex.sets.length - 1) {
-      setCurrentSetIndex(currentSetIndex + 1);
-    } else if (currentExerciseIndex < updated.exercises.length - 1) {
-      setCurrentExerciseIndex(currentExerciseIndex + 1);
-      setCurrentSetIndex(0);
-    }
+    if (currentSetIndex < ex.sets.length - 1) setCurrentSetIndex(currentSetIndex + 1);
+    else if (currentExerciseIndex < updated.exercises.length - 1) { setCurrentExerciseIndex(currentExerciseIndex + 1); setCurrentSetIndex(0); }
   };
 
   // Finish workout
@@ -331,6 +344,15 @@ export default function App() {
       .filter(Boolean).slice(-8);
   };
 
+  // Format weight display
+  const formatWeight = (weight, isTravel) => {
+    if (isTravel) return BAND_LEVELS[weight] || `Level ${weight}`;
+    return `${weight}kg`;
+  };
+
+  // Check if current workout is travel mode
+  const isCurrentWorkoutTravel = currentWorkout?.trainingMode === 'travel';
+
   // Color maps
   const colors = {
     legs: { bg: 'bg-emerald-500', light: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200' },
@@ -348,7 +370,7 @@ export default function App() {
       <div className="min-h-screen bg-stone-50">
         <div className="px-5 pt-8 pb-28 safe-top">
           {/* Header */}
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-6">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <Activity size={18} className="text-stone-400" />
@@ -357,7 +379,7 @@ export default function App() {
               <h1 className="text-3xl font-bold text-stone-800">Week {Math.ceil(stats.totalSessions / 3) || 1}</h1>
             </div>
 
-            {/* Sync Status / Settings */}
+            {/* Sync Status */}
             <button onClick={() => setShowSettings(true)} className="relative p-2">
               {isSignedIn ? (
                 <>
@@ -376,8 +398,30 @@ export default function App() {
             </button>
           </div>
 
+          {/* Mode Toggle */}
+          <div className="flex bg-stone-200 rounded-xl p-1 mb-6">
+            <button
+              onClick={() => setTrainingMode('home')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                trainingMode === 'home' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'
+              }`}
+            >
+              <House size={16} />
+              Home
+            </button>
+            <button
+              onClick={() => setTrainingMode('travel')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                trainingMode === 'travel' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'
+              }`}
+            >
+              <Plane size={16} />
+              Travel
+            </button>
+          </div>
+
           {/* Stats */}
-          <div className="flex gap-3 mb-10">
+          <div className="flex gap-3 mb-8">
             <div className="flex-1 bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
               <p className="text-3xl font-bold text-stone-800 tabular-nums">{stats.totalSessions}</p>
               <p className="text-xs text-stone-400 mt-1">sessions</p>
@@ -392,8 +436,15 @@ export default function App() {
             </div>
           </div>
 
+          {/* Mode indicator */}
+          <div className={`flex items-center gap-2 mb-3 ${trainingMode === 'travel' ? 'text-sky-600' : 'text-stone-400'}`}>
+            {trainingMode === 'travel' ? <Plane size={14} /> : <House size={14} />}
+            <span className="text-xs font-medium uppercase tracking-wider">
+              {trainingMode === 'travel' ? 'Travel Mode — Bands Only' : 'Home Mode — Dumbbells + Bands'}
+            </span>
+          </div>
+
           {/* Workouts */}
-          <h2 className="text-xs font-medium text-stone-400 uppercase tracking-wider mb-3">Start Workout</h2>
           <div className="space-y-3 mb-10">
             {Object.entries(routine).map(([key, day]) => {
               const c = colors[key];
@@ -429,7 +480,12 @@ export default function App() {
               <div className="bg-white rounded-2xl p-4 border border-stone-100 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-semibold text-stone-800">{history[history.length - 1].workoutName}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-stone-800">{history[history.length - 1].workoutName}</p>
+                      {history[history.length - 1].trainingMode === 'travel' && (
+                        <Plane size={12} className="text-sky-500" />
+                      )}
+                    </div>
                     <p className="text-sm text-stone-400">
                       {new Date(history[history.length - 1].date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                     </p>
@@ -515,9 +571,12 @@ export default function App() {
   if (screen === 'workout' && currentWorkout) {
     const ex = currentWorkout.exercises[currentExerciseIndex];
     const set = ex.sets[currentSetIndex];
-    const lastWorkout = history.filter(h => h.workoutType === currentWorkout.workoutType).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+    const lastWorkout = history
+      .filter(h => h.workoutType === currentWorkout.workoutType && h.trainingMode === currentWorkout.trainingMode)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
     const lastPerf = lastWorkout?.exercises.find(e => e.exerciseId === ex.id)?.sets[currentSetIndex];
     const c = colors[currentWorkout.workoutType];
+    const isTravel = isCurrentWorkoutTravel;
 
     return (
       <div className="min-h-screen bg-stone-50">
@@ -527,10 +586,13 @@ export default function App() {
             <button onClick={() => { setScreen('home'); setCurrentWorkout(null); }} className="text-stone-400 -ml-1 p-1">
               <X size={22} />
             </button>
-            <div className="flex items-center gap-1.5">
-              {currentWorkout.exercises.map((_, i) => (
-                <div key={i} className={`w-2 h-2 rounded-full transition-colors ${i <= currentExerciseIndex ? c.bg : 'bg-stone-200'}`} />
-              ))}
+            <div className="flex items-center gap-2">
+              {isTravel && <Plane size={14} className="text-sky-500" />}
+              <div className="flex items-center gap-1.5">
+                {currentWorkout.exercises.map((_, i) => (
+                  <div key={i} className={`w-2 h-2 rounded-full transition-colors ${i <= currentExerciseIndex ? c.bg : 'bg-stone-200'}`} />
+                ))}
+              </div>
             </div>
             <button onClick={finishWorkout} className={`${c.text} font-semibold text-sm`}>Done</button>
           </div>
@@ -560,24 +622,47 @@ export default function App() {
         {/* Last Performance */}
         {lastPerf && (
           <div className="bg-amber-50 px-5 py-2.5 border-b border-amber-100">
-            <p className="text-xs text-amber-700 text-center">Last: {lastPerf.weight}kg × {lastPerf.reps} @ RPE {lastPerf.rpe}</p>
+            <p className="text-xs text-amber-700 text-center">
+              Last: {formatWeight(lastPerf.weight, isTravel)} × {lastPerf.reps} @ RPE {lastPerf.rpe}
+            </p>
           </div>
         )}
 
-        {/* Weight */}
+        {/* Weight / Band Level */}
         <div className="px-5 py-5 bg-white border-b border-stone-100">
-          <label className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mb-3 block">Weight (kg)</label>
-          <div className="flex items-center justify-center gap-2">
-            {[-5, -1].map(n => (
-              <button key={n} onClick={() => setLogWeight(Math.max(0, logWeight + n))} className="w-12 h-12 rounded-xl bg-stone-100 text-stone-600 font-semibold text-sm active:bg-stone-200">{n}</button>
-            ))}
-            <div className={`w-20 h-12 rounded-xl ${c.light} flex items-center justify-center`}>
-              <span className={`text-2xl font-bold ${c.text} tabular-nums`}>{logWeight}</span>
+          <label className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mb-3 block">
+            {isTravel ? 'Band Level' : 'Weight (kg)'}
+          </label>
+          
+          {isTravel ? (
+            // Band level selector
+            <div className="flex justify-center gap-2">
+              {BAND_LEVELS.map((level, i) => (
+                <button
+                  key={i}
+                  onClick={() => setLogWeight(i)}
+                  className={`px-3 py-3 rounded-xl font-medium text-sm transition-all ${
+                    logWeight === i ? `${c.bg} text-white` : 'bg-stone-100 text-stone-500'
+                  }`}
+                >
+                  {level}
+                </button>
+              ))}
             </div>
-            {[1, 5].map(n => (
-              <button key={n} onClick={() => setLogWeight(logWeight + n)} className="w-12 h-12 rounded-xl bg-stone-100 text-stone-600 font-semibold text-sm active:bg-stone-200">+{n}</button>
-            ))}
-          </div>
+          ) : (
+            // Weight selector
+            <div className="flex items-center justify-center gap-2">
+              {[-5, -1].map(n => (
+                <button key={n} onClick={() => setLogWeight(Math.max(0, logWeight + n))} className="w-12 h-12 rounded-xl bg-stone-100 text-stone-600 font-semibold text-sm active:bg-stone-200">{n}</button>
+              ))}
+              <div className={`w-20 h-12 rounded-xl ${c.light} flex items-center justify-center`}>
+                <span className={`text-2xl font-bold ${c.text} tabular-nums`}>{logWeight}</span>
+              </div>
+              {[1, 5].map(n => (
+                <button key={n} onClick={() => setLogWeight(logWeight + n)} className="w-12 h-12 rounded-xl bg-stone-100 text-stone-600 font-semibold text-sm active:bg-stone-200">+{n}</button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Reps */}
@@ -648,7 +733,7 @@ export default function App() {
                     {isDone ? (
                       <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center"><Check size={12} className="text-white" /></div>
                     ) : (
-                      <div className={`w-5 h-5 rounded-full border-2 ${isActive ? c.border.replace('border-', 'border-') : 'border-stone-300'}`} style={{ borderColor: isActive ? undefined : undefined }} />
+                      <div className={`w-5 h-5 rounded-full border-2 ${isActive ? c.border.replace('border-', 'border-') : 'border-stone-300'}`} />
                     )}
                     <span className={`text-sm font-medium ${isActive ? c.text : isDone ? 'text-emerald-700' : 'text-stone-600'}`}>{e.name}</span>
                   </div>
@@ -684,27 +769,52 @@ export default function App() {
           <h1 className="text-2xl font-bold text-stone-800 mb-6">Progress</h1>
 
           <button
-            onClick={() => { setReportText(generateReport(history, routine)); setShowReport(true); }}
+            onClick={() => { setReportText(generateReport(history, routine, trainingMode)); setShowReport(true); }}
             className="w-full mb-8 p-4 rounded-2xl bg-stone-800 text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98]"
           >
             <FileText size={18} />
             Generate 30-Day Report
           </button>
 
+          {/* Mode Toggle for viewing */}
+          <div className="flex bg-stone-200 rounded-xl p-1 mb-4">
+            <button
+              onClick={() => setTrainingMode('home')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-xs transition-all ${
+                trainingMode === 'home' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'
+              }`}
+            >
+              <House size={14} />
+              Home
+            </button>
+            <button
+              onClick={() => setTrainingMode('travel')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-xs transition-all ${
+                trainingMode === 'travel' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'
+              }`}
+            >
+              <Plane size={14} />
+              Travel
+            </button>
+          </div>
+
           <h2 className="text-xs font-medium text-stone-400 uppercase tracking-wider mb-3">Exercise Trends</h2>
           <div className="space-y-3">
-            {Object.values(routine).flatMap(day => day.exercises).slice(0, 8).map(ex => {
+            {Object.values(routine).flatMap(day => day.exercises).map(ex => {
               const data = getExerciseHistory(ex.id);
               if (data.length < 2) return null;
               const max = Math.max(...data.map(d => d.weight));
               const min = Math.min(...data.map(d => d.weight));
               const range = max - min || 1;
+              const isTravel = ex.id.startsWith('travel-');
 
               return (
                 <div key={ex.id} className="bg-white rounded-xl p-4 border border-stone-100">
                   <div className="flex justify-between items-center mb-3">
                     <h3 className="text-sm font-medium text-stone-700">{ex.name}</h3>
-                    <span className="text-sm font-semibold text-stone-800 tabular-nums">{data[data.length - 1].weight}kg</span>
+                    <span className="text-sm font-semibold text-stone-800">
+                      {formatWeight(data[data.length - 1].weight, isTravel)}
+                    </span>
                   </div>
                   <div className="h-10 flex items-end gap-1">
                     {data.map((d, i) => (
@@ -760,6 +870,28 @@ export default function App() {
       <div className="min-h-screen bg-stone-50">
         <div className="px-5 pt-8 pb-28 safe-top">
           <h1 className="text-2xl font-bold text-stone-800 mb-6">Program</h1>
+
+          {/* Mode Toggle */}
+          <div className="flex bg-stone-200 rounded-xl p-1 mb-6">
+            <button
+              onClick={() => setTrainingMode('home')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                trainingMode === 'home' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'
+              }`}
+            >
+              <House size={16} />
+              Home
+            </button>
+            <button
+              onClick={() => setTrainingMode('travel')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                trainingMode === 'travel' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'
+              }`}
+            >
+              <Plane size={16} />
+              Travel
+            </button>
+          </div>
 
           {Object.entries(routine).map(([key, day]) => {
             const c = colors[key];
@@ -853,6 +985,7 @@ export default function App() {
     if (!last) { setScreen('home'); return null; }
     const prs = last.exercises.flatMap(e => e.sets).filter(s => s.isPR).length;
     const c = colors[last.workoutType];
+    const isTravel = last.trainingMode === 'travel';
 
     return (
       <div className={`min-h-screen ${c.bg} p-6 flex flex-col items-center justify-center text-white safe-top safe-bottom`}>
@@ -860,7 +993,10 @@ export default function App() {
           <Trophy size={32} />
         </div>
         <h1 className="text-2xl font-bold mb-1">Workout Complete</h1>
-        <p className="text-white/70 mb-8">{last.workoutName} Day</p>
+        <div className="flex items-center gap-2 text-white/70 mb-8">
+          <span>{last.workoutName} Day</span>
+          {isTravel && <Plane size={14} />}
+        </div>
 
         <div className="flex gap-4 mb-10">
           <div className="bg-white/20 rounded-2xl px-6 py-4 text-center">
