@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Trophy, ChevronRight, Check, Plus, Minus, Timer, X, TrendingUp, 
   Dumbbell, FileText, Home, Sparkles, Edit2, Save, Activity, 
-  Cloud, CloudOff, RefreshCw, Plane, House
+  Cloud, CloudOff, RefreshCw, Plane, Home
 } from 'lucide-react';
 import { useGoogleDrive } from './hooks/useGoogleDrive';
 import { HOME_ROUTINE, TRAVEL_ROUTINE, STARTING_WEIGHTS } from './data/defaultRoutine';
@@ -406,7 +406,7 @@ export default function App() {
                 trainingMode === 'home' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'
               }`}
             >
-              <House size={16} />
+              <Home size={16} />
               Home
             </button>
             <button
@@ -438,7 +438,7 @@ export default function App() {
 
           {/* Mode indicator */}
           <div className={`flex items-center gap-2 mb-3 ${trainingMode === 'travel' ? 'text-sky-600' : 'text-stone-400'}`}>
-            {trainingMode === 'travel' ? <Plane size={14} /> : <House size={14} />}
+            {trainingMode === 'travel' ? <Plane size={14} /> : <Home size={14} />}
             <span className="text-xs font-medium uppercase tracking-wider">
               {trainingMode === 'travel' ? 'Travel Mode — Bands Only' : 'Home Mode — Dumbbells + Bands'}
             </span>
@@ -784,7 +784,7 @@ export default function App() {
                 trainingMode === 'home' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'
               }`}
             >
-              <House size={14} />
+              <Home size={14} />
               Home
             </button>
             <button
@@ -879,7 +879,7 @@ export default function App() {
                 trainingMode === 'home' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'
               }`}
             >
-              <House size={16} />
+              <Home size={16} />
               Home
             </button>
             <button
