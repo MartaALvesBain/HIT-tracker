@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Trophy, ChevronRight, Check, Plus, Minus, Timer, X, TrendingUp, 
   Dumbbell, FileText, Home, Sparkles, Edit2, Save, Activity, 
-  Cloud, CloudOff, RefreshCw, Plane, Home
+  Cloud, CloudOff, RefreshCw, Plane
 } from 'lucide-react';
 import { useGoogleDrive } from './hooks/useGoogleDrive';
 import { HOME_ROUTINE, TRAVEL_ROUTINE, STARTING_WEIGHTS } from './data/defaultRoutine';
@@ -42,7 +42,6 @@ const generateReport = (history, routine, trainingMode) => {
       const current = recentSets.reduce((best, s) => s.weight > best.weight ? s : best, recentSets[0]);
       const starting = olderSets.length > 0 ? olderSets.reduce((best, s) => s.weight < best.weight ? s : best, olderSets[0]) : recentSets[0];
       const change = current.weight - starting.weight;
-      const unit = ex.id.startsWith('travel-') ? ' band' : 'kg';
       const formatWeight = (w) => ex.id.startsWith('travel-') ? BAND_LEVELS[w] || w : w + 'kg';
       return { name: ex.name, starting: `${formatWeight(starting.weight)} × ${starting.reps}`, current: `${formatWeight(current.weight)} × ${current.reps}`, change, isStall: change === 0, isTravel: ex.id.startsWith('travel-') };
     }).filter(Boolean);
@@ -406,8 +405,7 @@ export default function App() {
                 trainingMode === 'home' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'
               }`}
             >
-              <Home size={16} />
-              Home
+              🏠 Home
             </button>
             <button
               onClick={() => setTrainingMode('travel')}
@@ -438,7 +436,7 @@ export default function App() {
 
           {/* Mode indicator */}
           <div className={`flex items-center gap-2 mb-3 ${trainingMode === 'travel' ? 'text-sky-600' : 'text-stone-400'}`}>
-            {trainingMode === 'travel' ? <Plane size={14} /> : <Home size={14} />}
+            {trainingMode === 'travel' ? <Plane size={14} /> : <span>🏠</span>}
             <span className="text-xs font-medium uppercase tracking-wider">
               {trainingMode === 'travel' ? 'Travel Mode — Bands Only' : 'Home Mode — Dumbbells + Bands'}
             </span>
@@ -784,8 +782,7 @@ export default function App() {
                 trainingMode === 'home' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'
               }`}
             >
-              <Home size={14} />
-              Home
+              🏠 Home
             </button>
             <button
               onClick={() => setTrainingMode('travel')}
@@ -879,8 +876,7 @@ export default function App() {
                 trainingMode === 'home' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'
               }`}
             >
-              <Home size={16} />
-              Home
+              🏠 Home
             </button>
             <button
               onClick={() => setTrainingMode('travel')}
