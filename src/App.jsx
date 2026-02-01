@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Trophy, ChevronRight, Check, Plus, Minus, Timer, X, TrendingUp, 
   Dumbbell, FileText, Home, Sparkles, Edit2, Save, Activity, 
-  Cloud, CloudOff, RefreshCw, Plane
+  Cloud, CloudOff, RefreshCw, Plane, Trash2, Star
 } from 'lucide-react';
 import { useGoogleDrive } from './hooks/useGoogleDrive';
 import { HOME_ROUTINE, TRAVEL_ROUTINE, STARTING_WEIGHTS } from './data/defaultRoutine';
@@ -11,12 +11,12 @@ import { HOME_ROUTINE, TRAVEL_ROUTINE, STARTING_WEIGHTS } from './data/defaultRo
 const BAND_LEVELS = ['None', 'Light', 'Medium', 'Heavy', 'X-Heavy'];
 
 // Utility: Check for PR
-const checkForPR = (exerciseId, weight, reps, history) => {
+const checkForPR = (exerciseId, weight, reps, history, side = null) => {
   const previousBests = history
     .flatMap(s => s.exercises)
     .filter(ex => ex.exerciseId === exerciseId)
     .flatMap(ex => ex.sets)
-    .filter(set => set.type === 'working');
+    .filter(set => set.type === 'working' && (side === null || set.side === side));
 
   if (previousBests.length === 0) return true;
   const maxWeight = Math.max(...previousBests.map(s => s.weight));
@@ -141,6 +141,7 @@ export default function App() {
   const [currentWorkout, setCurrentWorkout] = useState(null);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [currentSetIndex, setCurrentSetIndex] = useState(0);
+  const [currentSide, setCurrentSide] = useState('right'); // for unilateral exercises
 
   // Logging state
   const [logWeight, setLogWeight] = useState(0);
@@ -155,6 +156,7 @@ export default function App() {
   const [showReport, setShowReport] = useState(false);
   const [reportText, setReportText] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [editingSession, setEditingSession] = useState(null);
 
   // Load data on mount
   useEffect(() => {
@@ -238,20 +240,48 @@ export default function App() {
         setLogReps(set.reps || parseInt(ex.targetReps) || 12);
         setLogRpe(set.rpe || 8);
         setLogNote('');
+        // Reset side for unilateral exercises
+        if (ex.unilateral && !set.completed) {
+          setCurrentSide('right');
+        }
       }
     }
   }, [currentWorkout, currentExerciseIndex, currentSetIndex]);
 
+  // Check if exercise is unilateral based on rep scheme
+  const isUnilateral = (exercise) => {
+    return exercise.unilateral || (exercise.targetReps && exercise.targetReps.toLowerCase().includes('each'));
+  };
+
   // Start workout
   const startWorkout = (type) => {
     const workoutRoutine = routine[type];
-    const exercises = workoutRoutine.exercises.map(ex => ({
-      ...ex,
-      sets: [
+    const exercises = workoutRoutine.exercises.map(ex => {
+      const unilateral = isUnilateral(ex);
+      // For unilateral exercises, we need sets for each side
+      const setsPerSide = [
         ...Array(ex.warmupSets).fill(null).map(() => ({ type: 'warmup', weight: null, reps: null, rpe: null, completed: false })),
         ...Array(ex.workingSets).fill(null).map(() => ({ type: 'working', weight: null, reps: null, rpe: null, completed: false }))
-      ]
-    }));
+      ];
+      
+      let sets;
+      if (unilateral) {
+        // Double the sets for unilateral exercises (right then left for each set)
+        sets = [];
+        setsPerSide.forEach(set => {
+          sets.push({ ...set, side: 'right' });
+          sets.push({ ...set, side: 'left' });
+        });
+      } else {
+        sets = setsPerSide;
+      }
+
+      return {
+        ...ex,
+        unilateral,
+        sets
+      };
+    });
 
     // Pre-fill from last same workout type AND same mode
     const lastWorkout = history
@@ -261,7 +291,19 @@ export default function App() {
     if (lastWorkout) {
       exercises.forEach(ex => {
         const lastEx = lastWorkout.exercises.find(e => e.exerciseId === ex.id);
-        if (lastEx) ex.sets.forEach((set, i) => { if (lastEx.sets[i]) Object.assign(set, lastEx.sets[i], { completed: false }); });
+        if (lastEx) {
+          ex.sets.forEach((set, i) => {
+            // Find matching set from last workout (by type and side if applicable)
+            const matchingSet = lastEx.sets.find((s, j) => 
+              s.type === set.type && 
+              (!set.side || s.side === set.side) &&
+              j === i
+            ) || lastEx.sets[i];
+            if (matchingSet) {
+              Object.assign(set, matchingSet, { completed: false });
+            }
+          });
+        }
       });
     }
 
@@ -278,6 +320,7 @@ export default function App() {
     setCurrentWorkout(newWorkout);
     setCurrentExerciseIndex(0);
     setCurrentSetIndex(0);
+    setCurrentSide('right');
 
     const firstSet = exercises[0].sets[0];
     setLogWeight(firstSet.weight || STARTING_WEIGHTS[exercises[0].id] || 0);
@@ -291,19 +334,40 @@ export default function App() {
     const updated = JSON.parse(JSON.stringify(currentWorkout));
     const ex = updated.exercises[currentExerciseIndex];
     const set = ex.sets[currentSetIndex];
-    Object.assign(set, { weight: logWeight, reps: logReps, rpe: logRpe, note: logNote, completed: true });
+    
+    Object.assign(set, { 
+      weight: logWeight, 
+      reps: logReps, 
+      rpe: logRpe, 
+      note: logNote, 
+      completed: true,
+      side: set.side || null
+    });
 
-    if (set.type === 'working' && checkForPR(ex.id, logWeight, logReps, history)) {
+    if (set.type === 'working' && checkForPR(ex.id, logWeight, logReps, history, set.side)) {
       set.isPR = true;
       setShowPRCelebration(true);
       setTimeout(() => setShowPRCelebration(false), 3000);
     }
 
     setCurrentWorkout(updated);
-    setRestTimeLeft(set.type === 'warmup' ? 60 : 90);
+    
+    // Set rest timer (shorter between sides of same exercise)
+    const nextSet = ex.sets[currentSetIndex + 1];
+    if (nextSet && nextSet.side && set.side && nextSet.type === set.type) {
+      // Same exercise, switching sides - shorter rest
+      setRestTimeLeft(30);
+    } else {
+      setRestTimeLeft(set.type === 'warmup' ? 60 : 90);
+    }
 
-    if (currentSetIndex < ex.sets.length - 1) setCurrentSetIndex(currentSetIndex + 1);
-    else if (currentExerciseIndex < updated.exercises.length - 1) { setCurrentExerciseIndex(currentExerciseIndex + 1); setCurrentSetIndex(0); }
+    // Move to next set
+    if (currentSetIndex < ex.sets.length - 1) {
+      setCurrentSetIndex(currentSetIndex + 1);
+    } else if (currentExerciseIndex < updated.exercises.length - 1) {
+      setCurrentExerciseIndex(currentExerciseIndex + 1);
+      setCurrentSetIndex(0);
+    }
   };
 
   // Finish workout
@@ -313,7 +377,8 @@ export default function App() {
       completed: true,
       exercises: currentWorkout.exercises.map(ex => ({ 
         exerciseId: ex.id, 
-        exerciseName: ex.name, 
+        exerciseName: ex.name,
+        unilateral: ex.unilateral,
         sets: ex.sets.filter(s => s.completed) 
       }))
     };
@@ -351,6 +416,38 @@ export default function App() {
 
   // Check if current workout is travel mode
   const isCurrentWorkoutTravel = currentWorkout?.trainingMode === 'travel';
+
+  // Delete set from session
+  const deleteSetFromSession = (exerciseIndex, setIndex) => {
+    if (!editingSession) return;
+    const updated = JSON.parse(JSON.stringify(editingSession));
+    updated.exercises[exerciseIndex].sets.splice(setIndex, 1);
+    setEditingSession(updated);
+  };
+
+  // Toggle PR on set
+  const togglePROnSet = (exerciseIndex, setIndex) => {
+    if (!editingSession) return;
+    const updated = JSON.parse(JSON.stringify(editingSession));
+    updated.exercises[exerciseIndex].sets[setIndex].isPR = !updated.exercises[exerciseIndex].sets[setIndex].isPR;
+    setEditingSession(updated);
+  };
+
+  // Save edited session
+  const saveEditedSession = () => {
+    if (!editingSession) return;
+    const updatedHistory = history.map(h => h.id === editingSession.id ? editingSession : h);
+    setHistory(updatedHistory);
+    setEditingSession(null);
+  };
+
+  // Delete entire session
+  const deleteSession = (sessionId) => {
+    if (confirm('Delete this entire session?')) {
+      setHistory(history.filter(h => h.id !== sessionId));
+      setEditingSession(null);
+    }
+  };
 
   // Color maps
   const colors = {
@@ -471,27 +568,35 @@ export default function App() {
             })}
           </div>
 
-          {/* Last Workout */}
+          {/* Recent Sessions */}
           {history.length > 0 && (
             <>
-              <h2 className="text-xs font-medium text-stone-400 uppercase tracking-wider mb-3">Last Session</h2>
-              <div className="bg-white rounded-2xl p-4 border border-stone-100 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-stone-800">{history[history.length - 1].workoutName}</p>
-                      {history[history.length - 1].trainingMode === 'travel' && (
-                        <Plane size={12} className="text-sky-500" />
-                      )}
+              <h2 className="text-xs font-medium text-stone-400 uppercase tracking-wider mb-3">Recent Sessions</h2>
+              <div className="space-y-2">
+                {history.slice(-5).reverse().map((session) => (
+                  <button
+                    key={session.id}
+                    onClick={() => setEditingSession(session)}
+                    className="w-full bg-white rounded-xl p-3 border border-stone-100 shadow-sm flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg ${colors[session.workoutType]?.light || 'bg-stone-100'} flex items-center justify-center`}>
+                        <Dumbbell size={14} className={colors[session.workoutType]?.text || 'text-stone-500'} />
+                      </div>
+                      <div className="text-left">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-stone-800">{session.workoutName}</p>
+                          {session.trainingMode === 'travel' && <Plane size={10} className="text-sky-500" />}
+                          {session.exercises.flatMap(e => e.sets).some(s => s.isPR) && <Star size={10} className="text-amber-500 fill-amber-500" />}
+                        </div>
+                        <p className="text-xs text-stone-400">
+                          {new Date(session.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-sm text-stone-400">
-                      {new Date(history[history.length - 1].date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-                    </p>
-                  </div>
-                  <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-                    <Check size={16} className="text-emerald-600" />
-                  </div>
-                </div>
+                    <Edit2 size={14} className="text-stone-300" />
+                  </button>
+                ))}
               </div>
             </>
           )}
@@ -544,6 +649,78 @@ export default function App() {
           </div>
         )}
 
+        {/* Session Edit Modal */}
+        {editingSession && (
+          <div className="fixed inset-0 bg-black/50 flex items-end z-50 animate-fade-in" onClick={() => setEditingSession(null)}>
+            <div className="bg-white rounded-t-3xl w-full max-h-[85vh] overflow-auto animate-slide-up" onClick={e => e.stopPropagation()}>
+              <div className="sticky top-0 bg-white px-5 py-4 border-b border-stone-100 flex justify-between items-center">
+                <div>
+                  <h2 className="text-lg font-bold text-stone-800">{editingSession.workoutName}</h2>
+                  <p className="text-xs text-stone-400">
+                    {new Date(editingSession.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                  </p>
+                </div>
+                <button onClick={() => setEditingSession(null)} className="text-stone-400"><X size={22} /></button>
+              </div>
+              
+              <div className="p-5 space-y-4">
+                {editingSession.exercises.map((ex, exIdx) => (
+                  <div key={exIdx} className="bg-stone-50 rounded-xl p-4">
+                    <h3 className="font-medium text-stone-800 mb-3">{ex.exerciseName}</h3>
+                    <div className="space-y-2">
+                      {ex.sets.map((set, setIdx) => (
+                        <div key={setIdx} className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs px-2 py-0.5 rounded ${set.type === 'warmup' ? 'bg-stone-100 text-stone-500' : 'bg-violet-100 text-violet-600'}`}>
+                              {set.type === 'warmup' ? 'W' : 'S'}
+                            </span>
+                            {set.side && (
+                              <span className="text-xs text-stone-400">{set.side === 'right' ? 'R' : 'L'}</span>
+                            )}
+                            <span className="text-sm text-stone-700">
+                              {formatWeight(set.weight, editingSession.trainingMode === 'travel')} × {set.reps}
+                            </span>
+                            {set.rpe && <span className="text-xs text-stone-400">@ {set.rpe}</span>}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => togglePROnSet(exIdx, setIdx)}
+                              className={`p-1.5 rounded-lg ${set.isPR ? 'bg-amber-100' : 'bg-stone-100'}`}
+                            >
+                              <Star size={14} className={set.isPR ? 'text-amber-500 fill-amber-500' : 'text-stone-400'} />
+                            </button>
+                            <button
+                              onClick={() => deleteSetFromSession(exIdx, setIdx)}
+                              className="p-1.5 rounded-lg bg-stone-100"
+                            >
+                              <Trash2 size={14} className="text-stone-400" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => deleteSession(editingSession.id)}
+                    className="flex-1 py-3 rounded-xl border border-rose-200 text-rose-500 font-medium text-sm"
+                  >
+                    Delete Session
+                  </button>
+                  <button
+                    onClick={saveEditedSession}
+                    className="flex-1 py-3 rounded-xl bg-stone-800 text-white font-medium text-sm"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Navigation */}
         <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-t border-stone-200 px-8 py-4 safe-bottom">
           <div className="flex justify-around">
@@ -572,9 +749,19 @@ export default function App() {
     const lastWorkout = history
       .filter(h => h.workoutType === currentWorkout.workoutType && h.trainingMode === currentWorkout.trainingMode)
       .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-    const lastPerf = lastWorkout?.exercises.find(e => e.exerciseId === ex.id)?.sets[currentSetIndex];
+    const lastPerf = lastWorkout?.exercises.find(e => e.exerciseId === ex.id)?.sets.find(s => 
+      s.type === set.type && (!set.side || s.side === set.side)
+    );
     const c = colors[currentWorkout.workoutType];
     const isTravel = isCurrentWorkoutTravel;
+
+    // Calculate display info for unilateral exercises
+    const setNumber = ex.unilateral 
+      ? Math.floor(currentSetIndex / 2) + 1 
+      : currentSetIndex + 1;
+    const totalSetsDisplay = ex.unilateral 
+      ? ex.sets.length / 2 
+      : ex.sets.length;
 
     return (
       <div className="min-h-screen bg-stone-50">
@@ -597,9 +784,14 @@ export default function App() {
           <h2 className="text-xl font-bold text-stone-800">{ex.name}</h2>
           <div className="flex items-center gap-2 mt-1">
             <span className={`text-xs px-2 py-0.5 rounded-full ${set.type === 'warmup' ? 'bg-stone-100 text-stone-500' : `${c.light} ${c.text}`}`}>
-              {set.type === 'warmup' ? `Warm-up ${currentSetIndex + 1}` : 'Working'}
+              {set.type === 'warmup' ? `Warm-up ${setNumber}` : `Working ${setNumber}`}
             </span>
-            <span className="text-xs text-stone-400">{ex.targetReps} reps · {ex.tempo}</span>
+            {set.side && (
+              <span className={`text-xs px-2 py-0.5 rounded-full ${set.side === 'right' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
+                {set.side === 'right' ? '→ Right' : '← Left'}
+              </span>
+            )}
+            <span className="text-xs text-stone-400">{ex.targetReps} · {ex.tempo}</span>
           </div>
         </div>
 
@@ -621,7 +813,7 @@ export default function App() {
         {lastPerf && (
           <div className="bg-amber-50 px-5 py-2.5 border-b border-amber-100">
             <p className="text-xs text-amber-700 text-center">
-              Last: {formatWeight(lastPerf.weight, isTravel)} × {lastPerf.reps} @ RPE {lastPerf.rpe}
+              Last{set.side ? ` (${set.side})` : ''}: {formatWeight(lastPerf.weight, isTravel)} × {lastPerf.reps} @ RPE {lastPerf.rpe}
             </p>
           </div>
         )}
@@ -707,7 +899,7 @@ export default function App() {
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-lg border-t border-stone-200 safe-bottom">
           <button onClick={logSet} className={`w-full py-4 rounded-2xl ${c.bg} text-white font-semibold flex items-center justify-center gap-2`}>
             <Check size={20} />
-            Log Set
+            Log {set.side ? `${set.side.charAt(0).toUpperCase() + set.side.slice(1)} Side` : 'Set'}
           </button>
         </div>
 
@@ -718,6 +910,8 @@ export default function App() {
             {currentWorkout.exercises.map((e, i) => {
               const done = e.sets.filter(s => s.completed).length;
               const total = e.sets.length;
+              const displayTotal = e.unilateral ? total / 2 : total;
+              const displayDone = e.unilateral ? Math.floor(done / 2) + (done % 2 === 1 ? 0.5 : 0) : done;
               const isActive = i === currentExerciseIndex;
               const isDone = done === total;
 
@@ -734,8 +928,9 @@ export default function App() {
                       <div className={`w-5 h-5 rounded-full border-2 ${isActive ? c.border.replace('border-', 'border-') : 'border-stone-300'}`} />
                     )}
                     <span className={`text-sm font-medium ${isActive ? c.text : isDone ? 'text-emerald-700' : 'text-stone-600'}`}>{e.name}</span>
+                    {e.unilateral && <span className="text-[10px] text-stone-400">L/R</span>}
                   </div>
-                  <span className="text-xs text-stone-400">{done}/{total}</span>
+                  <span className="text-xs text-stone-400">{displayDone}/{displayTotal}</span>
                 </button>
               );
             })}
@@ -903,8 +1098,11 @@ export default function App() {
                   {day.exercises.map((ex, i) => (
                     <div key={ex.id} className="bg-white rounded-xl px-4 py-3 border border-stone-100 flex justify-between items-center">
                       <div>
-                        <p className="text-sm font-medium text-stone-700">{ex.name}</p>
-                        <p className="text-xs text-stone-400">{ex.targetReps} · {ex.tempo}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-stone-700">{ex.name}</p>
+                          {isUnilateral(ex) && <span className="text-[10px] bg-stone-100 px-1.5 py-0.5 rounded text-stone-500">L/R</span>}
+                        </div>
+                        <p className="text-xs text-stone-400">{ex.targetReps} · {ex.tempo} · {ex.warmupSets}W + {ex.workingSets}S</p>
                       </div>
                       <button onClick={() => setEditingExercise({ dayKey: key, index: i, ...ex })} className="text-stone-300 p-1"><Edit2 size={14} /></button>
                     </div>
@@ -934,6 +1132,70 @@ export default function App() {
                       />
                     </div>
                   ))}
+                  
+                  {/* Warmup Sets */}
+                  <div>
+                    <label className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mb-2 block">Warm-up Sets</label>
+                    <div className="flex items-center gap-3">
+                      <button 
+                        onClick={() => setEditingExercise({ ...editingExercise, warmupSets: Math.max(0, editingExercise.warmupSets - 1) })}
+                        className="w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center active:bg-stone-200"
+                      >
+                        <Minus size={18} className="text-stone-600" />
+                      </button>
+                      <div className="w-16 h-10 rounded-xl bg-stone-100 flex items-center justify-center">
+                        <span className="text-lg font-bold text-stone-800">{editingExercise.warmupSets}</span>
+                      </div>
+                      <button 
+                        onClick={() => setEditingExercise({ ...editingExercise, warmupSets: editingExercise.warmupSets + 1 })}
+                        className="w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center active:bg-stone-200"
+                      >
+                        <Plus size={18} className="text-stone-600" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Working Sets */}
+                  <div>
+                    <label className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mb-2 block">Working Sets</label>
+                    <div className="flex items-center gap-3">
+                      <button 
+                        onClick={() => setEditingExercise({ ...editingExercise, workingSets: Math.max(1, editingExercise.workingSets - 1) })}
+                        className="w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center active:bg-stone-200"
+                      >
+                        <Minus size={18} className="text-stone-600" />
+                      </button>
+                      <div className="w-16 h-10 rounded-xl bg-stone-100 flex items-center justify-center">
+                        <span className="text-lg font-bold text-stone-800">{editingExercise.workingSets}</span>
+                      </div>
+                      <button 
+                        onClick={() => setEditingExercise({ ...editingExercise, workingSets: editingExercise.workingSets + 1 })}
+                        className="w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center active:bg-stone-200"
+                      >
+                        <Plus size={18} className="text-stone-600" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Unilateral Toggle */}
+                  <div>
+                    <label className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mb-2 block">Exercise Type</label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setEditingExercise({ ...editingExercise, unilateral: false, targetReps: editingExercise.targetReps.replace(' each', '') })}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${!editingExercise.unilateral && !editingExercise.targetReps.includes('each') ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-500'}`}
+                      >
+                        Both Sides
+                      </button>
+                      <button
+                        onClick={() => setEditingExercise({ ...editingExercise, unilateral: true, targetReps: editingExercise.targetReps.includes('each') ? editingExercise.targetReps : editingExercise.targetReps + ' each' })}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${editingExercise.unilateral || editingExercise.targetReps.includes('each') ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-500'}`}
+                      >
+                        L/R Separate
+                      </button>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mb-1 block">Notes</label>
                     <textarea
@@ -947,8 +1209,14 @@ export default function App() {
                   onClick={() => {
                     const newRoutine = JSON.parse(JSON.stringify(routine));
                     newRoutine[editingExercise.dayKey].exercises[editingExercise.index] = {
-                      id: editingExercise.id, name: editingExercise.name, targetReps: editingExercise.targetReps,
-                      tempo: editingExercise.tempo, warmupSets: editingExercise.warmupSets, workingSets: editingExercise.workingSets, notes: editingExercise.notes
+                      id: editingExercise.id, 
+                      name: editingExercise.name, 
+                      targetReps: editingExercise.targetReps,
+                      tempo: editingExercise.tempo, 
+                      warmupSets: editingExercise.warmupSets, 
+                      workingSets: editingExercise.workingSets, 
+                      notes: editingExercise.notes,
+                      unilateral: editingExercise.unilateral || editingExercise.targetReps.includes('each')
                     };
                     setRoutine(newRoutine);
                     setEditingExercise(null);
