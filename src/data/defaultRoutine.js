@@ -1,7 +1,7 @@
 export const HOME_ROUTINE = {
   legs: {
     name: "Legs",
-    dayOfWeek: "Wednesday",
+    dayOfWeek: "Sunday",
     color: "emerald",
     exercises: [
       { id: "goblet-squat", name: "Goblet Squat", targetReps: "12-15", tempo: "3/2/2", warmupSets: 2, workingSets: 1, notes: "Hold dumbbell at chest. Pause 2 sec at bottom." },
@@ -26,7 +26,7 @@ export const HOME_ROUTINE = {
   },
   pull: {
     name: "Pull",
-    dayOfWeek: "Sunday",
+    dayOfWeek: "Wednesday",
     color: "violet",
     exercises: [
       { id: "db-row", name: "Single-Arm DB Row", targetReps: "10-12 each", tempo: "3/1/2", warmupSets: 1, workingSets: 1, notes: "Pull elbow toward hip, squeeze shoulder blade." },
@@ -41,7 +41,7 @@ export const HOME_ROUTINE = {
 export const TRAVEL_ROUTINE = {
   legs: {
     name: "Legs",
-    dayOfWeek: "Wednesday",
+    dayOfWeek: "Sunday",
     color: "emerald",
     exercises: [
       { id: "travel-squat", name: "Band Squat", targetReps: "15-20", tempo: "3/2/2", warmupSets: 1, workingSets: 1, notes: "Stand on band, hold at shoulders. Heavy band." },
@@ -65,7 +65,7 @@ export const TRAVEL_ROUTINE = {
   },
   pull: {
     name: "Pull",
-    dayOfWeek: "Sunday",
+    dayOfWeek: "Wednesday",
     color: "violet",
     exercises: [
       { id: "travel-row", name: "Band Row", targetReps: "12-15", tempo: "3/1/2", warmupSets: 1, workingSets: 1, notes: "Anchor at chest height or stand on band. Medium-heavy band." },
