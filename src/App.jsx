@@ -356,9 +356,9 @@ export default function App() {
     const nextSet = ex.sets[currentSetIndex + 1];
     if (nextSet && nextSet.side && set.side && nextSet.type === set.type) {
       // Same exercise, switching sides - shorter rest
-      setRestTimeLeft(30);
+      setRestTimeLeft(45);
     } else {
-      setRestTimeLeft(set.type === 'warmup' ? 60 : 90);
+      setRestTimeLeft(60);
     }
 
     // Move to next set
