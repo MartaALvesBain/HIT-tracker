@@ -85,7 +85,7 @@ WORKOUT DISTRIBUTION
        EXERCISE PROGRESS BY SESSION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🦵 LEGS (Wednesday)
+🦵 LEGS (Sunday)
 ────────────────────────────────────────
 ${formatTable(legsProgress) || '  No data yet'}
 
@@ -93,7 +93,7 @@ ${formatTable(legsProgress) || '  No data yet'}
 ────────────────────────────────────────
 ${formatTable(pushProgress) || '  No data yet'}
 
-🏋️ PULL (Sunday)
+🏋️ PULL (Wednesday)
 ────────────────────────────────────────
 ${formatTable(pullProgress) || '  No data yet'}
 
