@@ -166,8 +166,22 @@ export default function App() {
       const localTravelRoutine = localStorage.getItem('hit-tracker-travel-routine');
       const localMode = localStorage.getItem('hit-tracker-mode');
       if (localHistory) setHistory(JSON.parse(localHistory));
-      if (localHomeRoutine) setHomeRoutine(JSON.parse(localHomeRoutine));
-      if (localTravelRoutine) setTravelRoutine(JSON.parse(localTravelRoutine));
+      if (localHomeRoutine) {
+        const parsed = JSON.parse(localHomeRoutine);
+        // Migration: fix workout days
+        if (parsed.legs) parsed.legs.dayOfWeek = 'Sunday';
+        if (parsed.push) parsed.push.dayOfWeek = 'Saturday';
+        if (parsed.pull) parsed.pull.dayOfWeek = 'Wednesday';
+        setHomeRoutine(parsed);
+      }
+      if (localTravelRoutine) {
+        const parsed = JSON.parse(localTravelRoutine);
+        // Migration: fix workout days
+        if (parsed.legs) parsed.legs.dayOfWeek = 'Sunday';
+        if (parsed.push) parsed.push.dayOfWeek = 'Saturday';
+        if (parsed.pull) parsed.pull.dayOfWeek = 'Wednesday';
+        setTravelRoutine(parsed);
+      }
       if (localMode) setTrainingMode(localMode);
     };
     loadLocalData();
@@ -189,8 +203,20 @@ export default function App() {
         const localHistory = JSON.parse(localStorage.getItem('hit-tracker-history') || '[]');
         const mergedHistory = cloudData.history?.length > localHistory.length ? cloudData.history : localHistory;
         setHistory(mergedHistory);
-        if (cloudData.homeRoutine) setHomeRoutine(cloudData.homeRoutine);
-        if (cloudData.travelRoutine) setTravelRoutine(cloudData.travelRoutine);
+        if (cloudData.homeRoutine) {
+          // Migration: fix workout days
+          if (cloudData.homeRoutine.legs) cloudData.homeRoutine.legs.dayOfWeek = 'Sunday';
+          if (cloudData.homeRoutine.push) cloudData.homeRoutine.push.dayOfWeek = 'Saturday';
+          if (cloudData.homeRoutine.pull) cloudData.homeRoutine.pull.dayOfWeek = 'Wednesday';
+          setHomeRoutine(cloudData.homeRoutine);
+        }
+        if (cloudData.travelRoutine) {
+          // Migration: fix workout days
+          if (cloudData.travelRoutine.legs) cloudData.travelRoutine.legs.dayOfWeek = 'Sunday';
+          if (cloudData.travelRoutine.push) cloudData.travelRoutine.push.dayOfWeek = 'Saturday';
+          if (cloudData.travelRoutine.pull) cloudData.travelRoutine.pull.dayOfWeek = 'Wednesday';
+          setTravelRoutine(cloudData.travelRoutine);
+        }
         await saveData({ history: mergedHistory, homeRoutine: cloudData.homeRoutine || homeRoutine, travelRoutine: cloudData.travelRoutine || travelRoutine });
       } else {
         await saveData({ history, homeRoutine, travelRoutine });
@@ -460,7 +486,7 @@ export default function App() {
   if (screen === 'home') {
     const stats = getStats();
     const today = new Date().getDay();
-    const suggested = today === 3 ? 'legs' : today === 6 ? 'push' : today === 0 ? 'pull' : null;
+    const suggested = today === 0 ? 'legs' : today === 6 ? 'push' : today === 3 ? 'pull' : null;
 
     return (
       <div className="min-h-screen bg-stone-50">
