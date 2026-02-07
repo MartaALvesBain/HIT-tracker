@@ -567,7 +567,8 @@ export default function App() {
 
           {/* Workouts */}
           <div className="space-y-3 mb-10">
-            {Object.entries(routine).map(([key, day]) => {
+            {['legs', 'pull', 'push'].map(key => {
+              const day = routine[key];
               const c = colors[key];
               const isSuggested = suggested === key;
 
@@ -1110,7 +1111,8 @@ export default function App() {
             </button>
           </div>
 
-          {Object.entries(routine).map(([key, day]) => {
+          {['legs', 'pull', 'push'].map(key => {
+            const day = routine[key];
             const c = colors[key];
 
             return (
