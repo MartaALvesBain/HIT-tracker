@@ -378,12 +378,16 @@ export default function App() {
 
     setCurrentWorkout(updated);
     
-    // Set rest timer (shorter between sides of same exercise)
+    // Set rest timer based on what's next
     const nextSet = ex.sets[currentSetIndex + 1];
     if (nextSet && nextSet.side && set.side && nextSet.type === set.type) {
-      // Same exercise, switching sides - shorter rest
+      // Same exercise, switching sides - shortest rest
+      setRestTimeLeft(30);
+    } else if (nextSet) {
+      // Same exercise, next set - medium rest
       setRestTimeLeft(45);
     } else {
+      // Moving to next exercise - longer rest
       setRestTimeLeft(60);
     }
 
