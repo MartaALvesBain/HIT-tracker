@@ -318,15 +318,18 @@ export default function App() {
       exercises.forEach(ex => {
         const lastEx = lastWorkout.exercises.find(e => e.exerciseId === ex.id);
         if (lastEx) {
-          ex.sets.forEach((set, i) => {
-            // Find matching set from last workout (by type and side if applicable)
-            const matchingSet = lastEx.sets.find((s, j) => 
-              s.type === set.type && 
-              (!set.side || s.side === set.side) &&
-              j === i
-            ) || lastEx.sets[i];
-            if (matchingSet) {
-              Object.assign(set, matchingSet, { completed: false });
+          // Track which sets we've already matched to avoid duplicates
+          const usedIndices = new Set();
+          ex.sets.forEach((set) => {
+            // Find matching set from last workout (by type and side)
+            const matchingIndex = lastEx.sets.findIndex((s, j) =>
+              !usedIndices.has(j) &&
+              s.type === set.type &&
+              (!set.side || s.side === set.side)
+            );
+            if (matchingIndex !== -1) {
+              usedIndices.add(matchingIndex);
+              Object.assign(set, lastEx.sets[matchingIndex], { completed: false });
             }
           });
         }
